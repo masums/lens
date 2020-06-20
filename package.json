@@ -6,11 +6,16 @@
     "email": "info@lakendlabs.com"
   },
   "copyright": "© 2020, Lakend Labs, Inc.",
-  "description": "The Smart Kubernetes Dashboard",
-  "version": "3.1.0-beta.0",
+  "license": "MIT",
+  "description": "Lens - The Kubernetes IDE",
+  "version": "3.6.0-dev",
   "main": "main.ts",
   "config": {
-    "bundledKubectlVersion": "1.17.3"
+    "bundledKubectlVersion": "1.17.4",
+    "bundledHelmVersion": "3.2.4"
+  },
+  "engines": {
+    "node": ">=12.0 <13.0"
   },
   "build": {
     "afterSign": "build/notarize.js",
@@ -35,12 +40,12 @@
       ],
       "extraResources": [
         {
-          "from": "binaries/server/linux/lens-server",
-          "to": "./lens-server.txt"
-        },
-        {
           "from": "binaries/client/linux/x64/kubectl",
           "to": "./x64/kubectl"
+        },
+        {
+          "from": "binaries/client/helm3/helm3",
+          "to": "./helm3/helm3"
         }
       ]
     },
@@ -51,12 +56,12 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extraResources": [
         {
-          "from": "binaries/server/darwin/lens-server",
-          "to": "./lens-server.txt"
-        },
-        {
           "from": "binaries/client/darwin/x64/kubectl",
           "to": "./x64/kubectl"
+        },
+        {
+          "from": "binaries/client/helm3/helm3",
+          "to": "./helm3/helm3"
         }
       ]
     },
@@ -66,20 +71,16 @@
       ],
       "extraResources": [
         {
-          "from": "binaries/server/win32/lens-server-x64.exe",
-          "to": "./lens-server-x64.exe"
-        },
-        {
-          "from": "binaries/server/win32/lens-server-ia32.exe",
-          "to": "./lens-server-ia32.exe"
-        },
-        {
           "from": "binaries/client/windows/x64/kubectl.exe",
           "to": "./x64/kubectl.exe"
         },
         {
           "from": "binaries/client/windows/ia32/kubectl.exe",
           "to": "./ia32/kubectl.exe"
+        },
+        {
+          "from": "binaries/client/helm3/helm3.exe",
+          "to": "./helm3/helm3.exe"
         }
       ]
     },
@@ -98,31 +99,35 @@
     "collectCoverage": true,
     "testRegex": "spec/.*_(spec)\\.[jt]sx?$",
     "verbose": true,
+    "testEnvironment": "node",
     "transform": {
       "^.+\\.tsx?$": "ts-jest"
     }
   },
   "scripts": {
-    "dev": "concurrently -n 'app,dash' 'yarn dev-electron' 'yarn dev-dashboard'",
-    "dev-dashboard": "cd dashboard && yarn app-dev",
+    "dev": "concurrently -n app,dash \"yarn dev-electron\" \"yarn dev-dashboard\"",
+    "dev-dashboard": "cd dashboard && yarn dev",
     "dev-electron": "electron-webpack dev",
-    "compile": "yarn download:kubectl && electron-webpack",
-    "build:linux": "yarn compile && electron-builder --linux --dir",
-    "build:mac": "yarn compile && electron-builder --mac --dir",
-    "build:win": "yarn compile && electron-builder --win --dir",
+    "compile": "yarn download:bins && electron-webpack",
+    "build:linux": "yarn compile && electron-builder --linux --dir -c.productName=LensDev",
+    "build:mac": "yarn compile && electron-builder --mac --dir -c.productName=LensDev",
+    "build:win": "yarn compile && electron-builder --win --dir -c.productName=LensDev",
     "dist": "yarn compile && electron-builder -p onTag",
     "dist:win": "yarn compile && electron-builder -p onTag --x64 --ia32",
     "dist:dir": "yarn dist --dir -c.compression=store -c.mac.identity=null",
     "lint": "eslint $@ --ext js,ts,vue --max-warnings=0  src/",
     "lint-dashboard": "eslint $@ --ext js,ts,tsx --max-warnings=0 dashboard/client dashboard/server",
     "postinstall": "patch-package",
-    "test": "node_modules/.bin/jest",
-    "download:kubectl": "yarn run ts-node build/download_kubectl.ts"
+    "test": "node_modules/.bin/jest spec/src/",
+    "integration": "node_modules/.bin/jest spec/integration/",
+    "download:bins": "concurrently \"yarn download:kubectl\" \"yarn download:helm\"",
+    "download:kubectl": "yarn run ts-node build/download_kubectl.ts",
+    "download:helm": "yarn run ts-node build/download_helm.ts"
   },
   "dependencies": {
     "@hapi/call": "^6.0.1",
     "@hapi/subtext": "^6.1.2",
-    "@kubernetes/client-node": "0.11.0",
+    "@kubernetes/client-node": "0.11.1",
     "@types/cookie": "^0.3.3",
     "@types/fs-extra": "^8.0.0",
     "@types/proper-lockfile": "^4.1.1",
@@ -135,7 +140,8 @@
     "electron-window-state": "^5.0.3",
     "filenamify": "^4.1.0",
     "handlebars": "4.1.2",
-    "http-proxy": "^1.17.0",
+    "http-proxy": "^1.18.0",
+    "http-proxy-middleware": "^0.19.2",
     "https-proxy-agent": "^3.0.1",
     "jsonwebtoken": "^8.5.1",
     "mac-ca": "^1.0.4",
@@ -165,6 +171,7 @@
   "devDependencies": {
     "@types/ejs": "^2.6.3",
     "@types/electron-window-state": "^2.0.31",
+    "@types/hapi": "^18.0.3",
     "@types/http-proxy": "^1.17.0",
     "@types/jest": "^24.0.18",
     "@types/jsonwebtoken": "^8.3.5",
@@ -179,13 +186,14 @@
     "@types/tempy": "0.1.0",
     "@types/universal-analytics": "^0.4.3",
     "@types/uuid": "^3.4.5",
+    "@types/webdriverio": "^4.13.0",
     "@typescript-eslint/eslint-plugin": "^2.7.0",
     "@typescript-eslint/parser": "^2.7.0",
     "bootstrap": "^4.3.1",
     "bootstrap-vue": "^2.0.0-rc.28",
     "concurrently": "^5.1.0",
     "css-loader": "^3.2.0",
-    "electron": "6.1.9",
+    "electron": "6.1.10",
     "electron-builder": "^22.4.0",
     "electron-notarize": "^0.2.1",
     "electron-webpack": "^2.7.4",
@@ -206,6 +214,7 @@
     "postinstall-postinstall": "^2.0.0",
     "prismjs": "^1.17.1",
     "sass-loader": "^8.0.0",
+    "spectron": "^8.0.0",
     "ts-jest": "^24.1.0",
     "ts-loader": "^6.0.4",
     "ts-node": "^8.4.1",

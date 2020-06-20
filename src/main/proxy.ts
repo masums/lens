@@ -17,6 +17,8 @@ export class LensProxy {
   protected clusterManager: ClusterManager
   protected retryCounters: Map<string, number> = new Map()
   protected router: Router
+  protected proxyServer: http.Server
+  protected closed = false
 
   constructor(port: number, clusterManager: ClusterManager) {
     this.port = port
@@ -27,6 +29,13 @@ export class LensProxy {
   public run() {
     const proxyServer = this.buildProxyServer();
     proxyServer.listen(this.port, "127.0.0.1")
+    this.proxyServer = proxyServer
+  }
+
+  public close() {
+    logger.info("Closing proxy server")
+    this.proxyServer.close()
+    this.closed = true
   }
 
   protected buildProxyServer() {
@@ -35,11 +44,7 @@ export class LensProxy {
       this.handleRequest(proxy, req, res);
     }.bind(this));
     proxyServer.on("upgrade", function(req: http.IncomingMessage, socket: Socket, head: Buffer) {
-      if (this.isRemoteShellRequired(req)) {
-        this.proxyWsUpgrade(proxy, req, socket, head)
-      } else {
-        this.handleWsUpgrade(req, socket, head)
-      }
+      this.handleWsUpgrade(req, socket, head)
     }.bind(this));
 
     proxyServer.on("error", (err) => {
@@ -74,6 +79,9 @@ export class LensProxy {
       }
     })
     proxy.on("error", (error, req, res, target) => {
+      if(this.closed) {
+        return
+      }
       if (target) {
         logger.debug("Failed proxy to target: " + JSON.stringify(target))
         if (req.method === "GET" && (!res.statusCode || res.statusCode >= 500)) {
@@ -87,8 +95,6 @@ export class LensProxy {
             }, (250 * retryCount))
           }
         }
-
-        //return
       }
       res.writeHead(500, {
         'Content-Type': 'text/plain'
@@ -134,9 +140,8 @@ export class LensProxy {
     if (req.url.startsWith("/api-kube/")) {
       delete req.headers.authorization
       req.url = req.url.replace("/api-kube", "")
-      return await contextHandler.getApiTarget()
-    } else {
-      return await contextHandler.getProxyTarget()
+      const isWatchRequest = req.url.includes("watch=")
+      return await contextHandler.getApiTarget(isWatchRequest)
     }
   }
 
@@ -158,24 +163,13 @@ export class LensProxy {
       return
     }
     contextHandler.ensureServer().then(async () => {
-      if (await this.router.route(cluster, req, res)) return
       const proxyTarget = await this.getProxyTarget(req, contextHandler)
-      proxy.web(req, res, proxyTarget)
-    })
-  }
-
-  protected async proxyWsUpgrade(proxy: httpProxy, req: http.IncomingMessage, socket: Socket, head: Buffer) {
-    const cluster = this.clusterManager.getClusterForRequest(req)
-    const contextHandler = cluster.contextHandler
-    contextHandler.applyHeaders(req);
-    const reqUrl = url.parse(req.url, true)
-    const urlParams = reqUrl.query
-    for (const [key, value] of Object.entries(urlParams)) {
-      if (key !== "token") {
-        req.headers["x-lens-param-" + key] = value
+      if (proxyTarget) {
+        proxy.web(req, res, proxyTarget)
+      } else {
+        this.router.route(cluster, req, res)
       }
-    }
-    proxy.ws(req, socket, head, await contextHandler.getProxyTarget());
+    })
   }
 
   protected async handleWsUpgrade(req: http.IncomingMessage, socket: Socket, head: Buffer) {
@@ -186,13 +180,6 @@ export class LensProxy {
     wsServer.handleUpgrade(req, socket, head, (con) => {
       wsServer.emit("connection", con, req);
     });
-  }
-
-  protected isRemoteShellRequired(req: http.IncomingMessage) {
-    if (!LensProxy.localShellSessions) {
-      return true
-    }
-    return false;
   }
 }
 

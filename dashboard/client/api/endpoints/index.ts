@@ -1,4 +1,4 @@
-// Local express.js & kontena endpoints
+// Local express.js endpoints
 export * from "./config.api"
 export * from "./cluster.api"
 export * from "./kubeconfig.api"
@@ -26,6 +26,7 @@ export * from "./network-policy.api"
 export * from "./persistent-volume-claims.api"
 export * from "./persistent-volume.api"
 export * from "./service.api"
+export * from "./endpoint.api"
 export * from "./storage-class.api"
 export * from "./pod-metrics.api"
 export * from "./podsecuritypolicy.api"

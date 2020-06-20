@@ -2,7 +2,98 @@
 
 Here you can find description of changes we've built into each release. While we try our best to make each upgrade automatic and as smooth as possible, there may be some cases where your might need to do something to ensure the application works smoothly. So please read through the release highlights!
 
-## 3.0.1 (current version)
+## 3.5.0 (current version)
+
+- Dynamic dashboard UI based on RBAC rules (hides non-accessible menus)
+- Show object reference for all objects
+- Unify scrollbars/paddings
+- New logo
+- Remove Helm release update checker
+- Improve Helm release version detection
+- Show owner reference on all resource details
+- Fix: add arch node selector for hybrid clusters
+- Fix pod shell command on Windows
+- Fix app freeze after closing terminal on Windows
+- Fix: use correct kubeconfig context on terminal when switching cluster
+- Fix error when closing Lens on Windows
+- Fix: deploy kube-state-metrics component only to amd64 nodes
+- Translation correction: transit to transmit
+- Remove Kontena reference from Lens logo
+- Track telemetry pref changed event
+- Integration tests using spectron
+
+## 3.4.0
+
+- Auto-detect Prometheus installation
+- Allow to select Prometheus query style
+- Show node events in node details
+- Enable code folding in resource editor
+- Improve dashboard reload
+- Provide link to configMap from pod details
+- Show system roles on Roles page
+- Terminal dock tab improvements
+- Fix port availability test
+- Fix EndpointSubset.toString() to work without ports
+- Return empty string if Helm release version is not detected
+- Delay webview create on cluster page
+- Fix no-drag css
+- Fix node shell session regression
+- Rebuild locales & fix translation bugs
+- Show always Events title in resource details
+- Fix missing spaces in container command
+- Check also beta.kubernetes.io/os selector for windows pod shell
+- Cache terminall shell env
+- Cleanup cluster webview loading
+- Update metrics feature components
+- Update dashboard npm packages
+
+## 3.3.1
+
+- Do not timeout watch requests
+- Fix pod shell error if no access to nodes
+- Fix list sort by age
+- Always refresh stores when object list is mounted
+- Update @kubernetes/client-node to 0.11.1
+
+## 3.3.0
+
+- New section: endpoints
+- Initial port-forward implementation for services
+- Hide object-list applied filters by default
+- Display emptyDir medium and size limit
+- Show pod terminating status
+- Fix default workspace remove
+- Fix issues with crd plugins
+- Fix use of bundled kubectl
+- Clean up legacy references to Kontena
+- Fix jobs sorting if condition is empty
+- Electron 6.1.10
+
+## 3.2.0
+
+- Render colors in logs
+- Add kubectl download mirror select to preferences
+- Bundle helm3 binary
+- Catch ipc errors on proxy exit
+- SelfSubjectAccessReview use 'pods' resource
+- Send Content-Type header on response for asset request
+- Fix Helm chart version comparison
+- Don't close namespace menu on select
+- Change terminal fit-to-window icon
+- Silence terminal websocket connection errors
+- Always end watch stream if connection to kube-api ends
+- Xterm v4.4.0
+
+## 3.1.0
+
+- Windows pod shell (powershell)
+- Simplified internal architecture (improves watch & metrics stability)
+- New icon
+- Support `kubernetes.io/role` label for node roles
+- Unlink binary download on error properly
+- Electron v6.1.9
+
+## 3.0.1
 
 - Fix an issue with bundled kubectl
 
@@ -199,4 +290,3 @@ Here you can find description of changes we've built into each release. While we
 ## 2.0.0
 
 Initial release of the Lens desktop application. Basic functionality with auto-import of users local kubeconfig for cluster access.
-

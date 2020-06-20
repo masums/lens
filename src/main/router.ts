@@ -1,12 +1,36 @@
-import * as http from "http";
-import { Cluster } from "./cluster";
+import * as http from "http"
+import * as path from "path"
+import { Cluster } from "./cluster"
+import { configRoute } from "./routes/config"
 import { helmApi } from "./helm-api"
 import { resourceApplierApi } from "./resource-applier-api"
+import { kubeconfigRoute } from "./routes/kubeconfig"
+import { metricsRoute } from "./routes/metrics"
+import { watchRoute } from "./routes/watch"
+import { portForwardRoute } from "./routes/port-forward"
+import { readFile } from "fs"
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Call = require('@hapi/call');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Subtext = require('@hapi/subtext');
+
+declare const __static: string;
+
+const assetsPath = path.join(__static, "build/client")
+
+const mimeTypes: {[key: string]: string} = {
+  "html": "text/html",
+  "txt": "text/plain",
+  "css": "text/css",
+  "gif": "image/gif",
+  "jpg": "image/jpeg",
+  "png": "image/png",
+  "svg": "image/svg+xml",
+  "js": "application/javascript",
+  "woff2": "font/woff2",
+  "ttf": "font/ttf"
+};
 
 interface RouteParams {
   [key: string]: string | undefined;
@@ -64,7 +88,41 @@ export class Router {
     return request
   }
 
+  protected handleStaticFile(file: string, response: http.ServerResponse) {
+    const asset = path.join(assetsPath, file)
+    readFile(asset, (err, data) => {
+      if (err) {
+        // default to index.html so that react routes work when page is refreshed
+        this.handleStaticFile("index.html", response)
+      } else {
+        const type = mimeTypes[path.extname(asset).slice(1)] || "text/plain";
+        response.setHeader("Content-Type", type);
+        response.write(data)
+        response.end()
+      }
+    })
+  }
+
   protected addRoutes() {
+    // Static assets
+    this.router.add({ method: 'get', path: '/{path*}' }, (request: LensApiRequest) => {
+      const { response, params } = request
+      const file = params.path || "/index.html"
+      this.handleStaticFile(file, response)
+    })
+
+    this.router.add({ method: 'get', path: '/api/config' }, configRoute.routeConfig.bind(configRoute))
+    this.router.add({ method: 'get', path: '/api/kubeconfig/service-account/{namespace}/{account}' }, kubeconfigRoute.routeServiceAccountRoute.bind(kubeconfigRoute))
+
+    // Watch API
+    this.router.add({ method: 'get', path: '/api/watch' }, watchRoute.routeWatch.bind(watchRoute))
+
+    // Metrics API
+    this.router.add({ method: 'post', path: '/api/metrics' }, metricsRoute.routeMetrics.bind(metricsRoute))
+
+    // Port-forward API
+    this.router.add({ method: 'post', path: '/api/services/{namespace}/{service}/port-forward/{port}' }, portForwardRoute.routeServicePortForward.bind(portForwardRoute))
+
     // Helm API
     this.router.add({ method: 'get', path: '/api-helm/v2/charts' }, helmApi.listCharts.bind(helmApi))
     this.router.add({ method: 'get', path: '/api-helm/v2/charts/{repo}/{chart}' }, helmApi.getChart.bind(helmApi))

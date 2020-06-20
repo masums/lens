@@ -11,26 +11,18 @@ export class PodsApi extends KubeApi<Pod> {
 
   getMetrics(pods: Pod[], namespace: string, selector = "pod, namespace"): Promise<IPodMetrics> {
     const podSelector = pods.map(pod => pod.getName()).join("|");
-    const cpuUsage = `sum(rate(container_cpu_usage_seconds_total{container_name!="POD",container_name!="",pod_name=~"${podSelector}",namespace="${namespace}"}[1m])) by (${selector})`;
-    const cpuRequests = `sum(kube_pod_container_resource_requests{pod=~"${podSelector}",resource="cpu",namespace="${namespace}"}) by (${selector})`;
-    const cpuLimits = `sum(kube_pod_container_resource_limits{pod=~"${podSelector}",resource="cpu",namespace="${namespace}"}) by (${selector})`;
-    const memoryUsage = `sum(container_memory_working_set_bytes{container_name!="POD",container_name!="",pod_name=~"${podSelector}",namespace="${namespace}"}) by (${selector})`;
-    const memoryRequests = `sum(kube_pod_container_resource_requests{pod=~"${podSelector}",resource="memory",namespace="${namespace}"}) by (${selector})`;
-    const memoryLimits = `sum(kube_pod_container_resource_limits{pod=~"${podSelector}",resource="memory",namespace="${namespace}"}) by (${selector})`;
-    const fsUsage = `sum(container_fs_usage_bytes{container_name!="POD",container_name!="",pod_name=~"${podSelector}",namespace="${namespace}"}) by (${selector})`;
-    const networkReceive = `sum(rate(container_network_receive_bytes_total{pod_name=~"${podSelector}",namespace="${namespace}"}[1m])) by (${selector})`;
-    const networkTransit = `sum(rate(container_network_transmit_bytes_total{pod_name=~"${podSelector}",namespace="${namespace}"}[1m])) by (${selector})`;
+    const opts = { category: "pods", pods: podSelector, namespace, selector }
 
     return metricsApi.getMetrics({
-      cpuUsage,
-      cpuRequests,
-      cpuLimits,
-      memoryUsage,
-      memoryRequests,
-      memoryLimits,
-      fsUsage,
-      networkReceive,
-      networkTransit,
+      cpuUsage: opts,
+      cpuRequests: opts,
+      cpuLimits: opts,
+      memoryUsage: opts,
+      memoryRequests: opts,
+      memoryLimits: opts,
+      fsUsage: opts,
+      networkReceive: opts,
+      networkTransmit: opts,
     }, {
       namespace,
     });
@@ -47,7 +39,7 @@ export interface IPodMetrics<T = IMetrics> {
   memoryLimits: T;
   fsUsage: T;
   networkReceive: T;
-  networkTransit: T;
+  networkTransmit: T;
 }
 
 export interface IPodLogsQuery {
@@ -175,6 +167,13 @@ export class Pod extends WorkloadKubeObject {
       persistentVolumeClaim: {
         claimName: string;
       };
+      emptyDir: {
+        medium?: string;
+        sizeLimit?: string;
+      };
+      configMap: {
+        name: string;
+      }
       secret: {
         secretName: string;
         defaultMode: number;
@@ -294,6 +293,9 @@ export class Pod extends WorkloadKubeObject {
 
   // Returns pod phase or container error if occured
   getStatusMessage() {
+    if (this.getReason() === PodStatus.EVICTED) return "Evicted";
+    if (this.getStatus() === PodStatus.RUNNING && this.metadata.deletionTimestamp) return "Terminating";
+
     let message = "";
     const statuses = this.getContainerStatuses(false); // not including initContainers
     if (statuses.length) {
@@ -309,7 +311,6 @@ export class Pod extends WorkloadKubeObject {
         }
       })
     }
-    if (this.getReason() === PodStatus.EVICTED) return "Evicted";
     if (message) return message;
     return this.getStatusPhase();
   }
@@ -404,6 +405,13 @@ export class Pod extends WorkloadKubeObject {
 
   getNodeName() {
     return this.spec?.nodeName
+  }
+
+  getSelectedNodeOs() {
+    if (!this.spec.nodeSelector) return
+    if (!this.spec.nodeSelector["kubernetes.io/os"] && !this.spec.nodeSelector["beta.kubernetes.io/os"]) return
+
+    return this.spec.nodeSelector["kubernetes.io/os"] || this.spec.nodeSelector["beta.kubernetes.io/os"]
   }
 }
 

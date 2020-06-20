@@ -14,6 +14,7 @@ import { UserManagement } from "./+user-management/user-management";
 import { ConfirmDialog } from "./confirm-dialog";
 import { usersManagementRoute } from "./+user-management/user-management.routes";
 import { clusterRoute, clusterURL } from "./+cluster";
+import { KubeConfigDialog } from "./kubeconfig-dialog/kubeconfig-dialog";
 import { Nodes, nodesRoute } from "./+nodes";
 import { Workloads, workloadsRoute, workloadsURL } from "./+workloads";
 import { Namespaces, namespacesRoute } from "./+namespaces";
@@ -31,6 +32,7 @@ import { PodLogsDialog } from "./+workloads-pods/pod-logs-dialog";
 import { DeploymentScaleDialog } from "./+workloads-deployments/deployment-scale-dialog";
 import { CustomResources } from "./+custom-resources/custom-resources";
 import { crdRoute } from "./+custom-resources";
+import { isAllowedResource } from "../api/rbac";
 
 @observer
 class App extends React.Component {
@@ -45,7 +47,7 @@ class App extends React.Component {
   };
 
   render() {
-    const homeUrl = configStore.isClusterAdmin ? clusterURL() : workloadsURL();
+    const homeUrl = (isAllowedResource(["events", "nodes", "pods"])) ? clusterURL() : workloadsURL();
     return (
       <I18nProvider i18n={_i18n}>
         <Router history={browserHistory}>
@@ -70,6 +72,7 @@ class App extends React.Component {
             <KubeObjectDetails/>
             <Notifications/>
             <ConfirmDialog/>
+            <KubeConfigDialog/>
             <AddRoleBindingDialog/>
             <PodLogsDialog/>
             <DeploymentScaleDialog/>

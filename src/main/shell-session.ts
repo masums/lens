@@ -10,6 +10,8 @@ import { Cluster, ClusterPreferences } from "./cluster"
 import { helmCli } from "./helm-cli"
 
 export class ShellSession extends EventEmitter {
+  static shellEnvs: Map<string, any> = new Map()
+
   protected websocket: WebSocket
   protected shellProcess: pty.IPty
   protected kubeconfigPath: string
@@ -18,6 +20,8 @@ export class ShellSession extends EventEmitter {
   protected kubectlBinDir: string;
   protected helmBinDir: string;
   protected preferences: ClusterPreferences;
+  protected running = false;
+  protected clusterId: string;
 
   constructor(socket: WebSocket, pathToKubeconfig: string, cluster: Cluster) {
     super()
@@ -25,13 +29,13 @@ export class ShellSession extends EventEmitter {
     this.kubeconfigPath =  pathToKubeconfig
     this.kubectl = new Kubectl(cluster.version)
     this.preferences = cluster.preferences || {}
+    this.clusterId = cluster.id
   }
 
   public async open() {
     this.kubectlBinDir = await this.kubectl.binDir()
     this.helmBinDir = helmCli.getBinaryDir()
-    await helmCli.binaryPath()
-    const env = this.getShellEnv()
+    const env = await this.getCachedShellEnv()
     const shell = env.PTYSHELL
     const args = await this.getShellArgs(shell)
     this.shellProcess = pty.spawn(shell, args, {
@@ -41,6 +45,7 @@ export class ShellSession extends EventEmitter {
       name: "xterm-256color",
       rows: 30,
     });
+    this.running = true;
 
     this.pipeStdout()
     this.pipeStdin()
@@ -75,8 +80,23 @@ export class ShellSession extends EventEmitter {
     }
   }
 
-  protected getShellEnv() {
-    const env = JSON.parse(JSON.stringify(shellEnv.sync()))
+  protected async getCachedShellEnv() {
+    let env = ShellSession.shellEnvs.get(this.clusterId)
+    if (!env) {
+      env = await this.getShellEnv()
+      ShellSession.shellEnvs.set(this.clusterId, env)
+    } else {
+      // refresh env in the background
+      this.getShellEnv().then((shellEnv: any) => {
+        ShellSession.shellEnvs.set(this.clusterId, shellEnv)
+      })
+    }
+
+    return env
+  }
+
+  protected async getShellEnv() {
+    const env = JSON.parse(JSON.stringify(await shellEnv()))
     const pathStr = [this.kubectlBinDir, this.helmBinDir, process.env.PATH].join(path.delimiter)
 
     if(process.platform === "win32") {
@@ -119,6 +139,8 @@ export class ShellSession extends EventEmitter {
   protected pipeStdin() {
     // write websocket messages to shellProcess
     this.websocket.on("message", function(data: string) {
+      if (!this.running) { return }
+
       const message = Buffer.from(data.slice(1, data.length), "base64").toString()
       switch (data[0]) {
       case "0":
@@ -137,22 +159,43 @@ export class ShellSession extends EventEmitter {
   }
 
   protected exit(code = 1000) {
-    this.websocket.close(code)
+    if (this.websocket.readyState == this.websocket.OPEN) this.websocket.close(code)
     this.emit('exit')
   }
 
   protected closeWebsocketOnProcessExit() {
-    this.shellProcess.on("exit", (_code) => {
-      this.exit()
+    this.shellProcess.on("exit", (code) => {
+      this.running = false
+      let timeout = 0
+      if (code > 0) {
+        this.sendResponse("Terminal will auto-close in 15 seconds ...")
+        timeout = 15*1000
+      }
+      setTimeout(() => {
+        this.exit()
+      }, timeout)
     });
   }
 
   protected exitProcessOnWebsocketClose() {
     this.websocket.on("close", () => {
-      if (this.shellProcess) {
-        this.shellProcess.kill();
-      }
+      this.killShellProcess()
     })
+  }
+
+  protected killShellProcess(){
+    if(this.running) {
+      // On Windows we need to kill the shell process by pid, since Lens won't respond after a while if using `this.shellProcess.kill()`
+      if (process.platform == "win32") {
+        try {
+          process.kill(this.shellProcess.pid)
+        } catch(e) {
+          return
+        }
+      } else {
+        this.shellProcess.kill()
+      }
+    }
   }
 
   protected sendResponse(msg: string) {

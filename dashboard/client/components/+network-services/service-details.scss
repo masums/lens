@@ -1,3 +1,9 @@
 .ServicesDetails {
-
+    .EndpointList{
+        .TableCell {
+          &.endpoints {
+            flex-grow: 3;
+          }
+        }
+      }
 }

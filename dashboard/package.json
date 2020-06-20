@@ -1,41 +1,23 @@
 {
-  "name": "kontena-lens",
-  "version": "1.13.1",
+  "name": "lens-app-dashboard",
+  "version": "0.0.0",
   "scripts": {
-    "app-dev": "yarn extract && webpack-cli --watch --cache --progress --output-path ../static/build/client/",
-    "build-client": "yarn extract && NODE_ENV=production webpack -p --cache --progress --output-path ../static/build/client/",
-    "build-server": "tsc --project server",
-    "pkg-server-linux": "pkg --no-bytecode --public --public-packages '*' -t node12-linux -o ../binaries/server/linux/lens-server build/server/app.js",
-    "pkg-server-macos": "pkg --no-bytecode --public --public-packages '*' -t node12-macos -o ../binaries/server/darwin/lens-server build/server/app.js",
-    "pkg-server-win": "pkg --no-bytecode --public --public-packages '*' -t node12-win -o ../binaries/server/win32/lens-server-x64.exe build/server/app.js",
+    "dev": "webpack-cli --watch --cache --progress --output-path ../static/build/client/",
+    "build": "webpack -p --progress --output-path ../static/build/client/",
     "test": "jest --config './test/jest.config.js'",
     "add-locale": "lingui add-locale",
-    "extract": "lingui extract --clean",
-    "compile": "lingui compile"
-  },
-  "nodemonConfig": {
-    "watch": [
-      ".env",
-      "package.json",
-      "server"
-    ],
-    "ext": "ts",
-    "execMap": {
-      "ts": "ts-node --project server/tsconfig.json"
-    }
+    "lingui-extract": "lingui extract --clean",
+    "lingui-compile": "lingui compile"
   },
   "dependencies": {
-    "@types/jsonpath": "^0.2.0",
     "axios": "^0.19.0",
     "chalk": "^2.4.2",
+    "compare-versions": "^3.6.0",
     "compression": "^1.7.4",
     "cookie-session": "^1.3.3",
     "cors": "^2.8.5",
     "crypto-js": "^3.1.9-1",
     "dotenv": "^8.2.0",
-    "express": "^4.17.1",
-    "helmet": "^3.21.2",
-    "http-proxy-middleware": "^0.20.0",
     "ip": "^1.1.5",
     "js-yaml": "^3.13.1",
     "jsonpath": "^1.0.2",
@@ -49,7 +31,7 @@
     "@babel/plugin-proposal-object-rest-spread": "^7.8.3",
     "@babel/plugin-syntax-dynamic-import": "^7.2.0",
     "@babel/plugin-transform-runtime": "^7.6.2",
-    "@babel/preset-env": "^7.8.7",
+    "@babel/preset-env": "=7.9.0",
     "@babel/preset-react": "^7.7.0",
     "@babel/preset-typescript": "^7.8.3",
     "@babel/runtime": "^7.7.2",
@@ -77,6 +59,7 @@
     "@types/ip": "^1.1.0",
     "@types/jest": "^24.0.22",
     "@types/js-yaml": "^3.12.1",
+    "@types/jsonpath": "^0.2.0",
     "@types/lingui__macro": "^2.7.3",
     "@types/lodash": "^4.14.146",
     "@types/marked": "^0.7.0",
@@ -92,13 +75,14 @@
     "@types/terser-webpack-plugin": "^2.2.0",
     "@types/webpack": "^4.39.8",
     "ace-builds": "^1.4.7",
+    "ansi_up": "^4.0.4",
     "babel-core": "^7.0.0-bridge.0",
     "babel-loader": "^8.0.6",
     "babel-plugin-macros": "^2.6.1",
     "chart.js": "^2.9.2",
     "color": "^3.1.2",
     "commander": "^4.0.1",
-    "concurrently": "^5.0.0",
+    "concurrently": "^5.1.0",
     "css-element-queries": "^1.2.1",
     "css-loader": "^3.2.0",
     "dompurify": "^2.0.7",
@@ -138,7 +122,7 @@
     "webpack": "^4.41.2",
     "webpack-cli": "^3.3.10",
     "webpack-dev-server": "^3.9.0",
-    "xterm": "^4.2.0-vscode1",
+    "xterm": "^4.4.0-vscode1",
     "xterm-addon-fit": "^0.3.0",
     "yargs": "^14.2.0"
   }

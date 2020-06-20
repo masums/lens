@@ -145,8 +145,13 @@ export default function initMenu(opts: MenuOptions, promiseIpc: any) {
           webContents.getFocusedWebContents().executeJavaScript('window.history.forward()')
         }
       },
-      { role: 'reload' },
-      { role: 'forceReload' },
+      {
+        label: 'Reload',
+        accelerator: 'CmdOrCtrl+R',
+        click () {
+          webContents.getFocusedWebContents().reload()
+        }
+      },
       ...(isDevelopment ? [
         { role: 'toggleDevTools'} as MenuItemConstructorOptions,
         {
@@ -178,13 +183,13 @@ export default function initMenu(opts: MenuOptions, promiseIpc: any) {
       {
         label: 'Community Slack',
         click: async () => {
-          shell.openExternal('https://join.slack.com/t/kontenacommunity/shared_invite/enQtOTc5NjAyNjYyOTk4LWU1NDQ0ZGFkOWJkNTRhYTc2YjVmZDdkM2FkNGM5MjhiYTRhMDU2NDQ1MzIyMDA4ZGZlNmExOTc0N2JmY2M3ZGI');
+          shell.openExternal('https://join.slack.com/t/k8slens/shared_invite/enQtOTc5NjAyNjYyOTk4LWU1NDQ0ZGFkOWJkNTRhYTc2YjVmZDdkM2FkNGM5MjhiYTRhMDU2NDQ1MzIyMDA4ZGZlNmExOTc0N2JmY2M3ZGI');
         },
       },
       {
         label: 'Report an Issue',
         click: async () => {
-          shell.openExternal('https://github.com/kontena/lens/issues');
+          shell.openExternal('https://github.com/lensapp/lens/issues');
         },
       },
       {

@@ -13,7 +13,6 @@ trigger:
     - "*"
 jobs:
   - job: Windows
-    condition: "and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))"
     pool:
       vmImage: windows-2019
     strategy:
@@ -34,21 +33,20 @@ jobs:
         inputs:
           key: yarn | $(Agent.OS) | yarn.lock
           path: $(YARN_CACHE_FOLDER)
+          cacheHitVar: CACHE_RESTORED
         displayName: Cache Yarn packages
       - script: make deps
         displayName: Install dependencies
-      - script: make lint
-        displayName: Lint
-      - script: make test
-        displayName: Run tests
+      - script: make integration-win
+        displayName: Run integration tests
       - script: make build
+        condition: "and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))"
         displayName: Build
         env:
           WIN_CSC_LINK: $(WIN_CSC_LINK)
           WIN_CSC_KEY_PASSWORD: $(WIN_CSC_KEY_PASSWORD)
           GH_TOKEN: $(GH_TOKEN)
   - job: macOS
-    condition: "and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))"
     pool:
       vmImage: macOS-10.14
     strategy:
@@ -58,6 +56,7 @@ jobs:
     steps:
       - script: CI_BUILD_TAG=`git describe --tags` && echo "##vso[task.setvariable variable=CI_BUILD_TAG]$CI_BUILD_TAG"
         displayName: Set the tag name as an environment variable
+        condition: "and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))"
       - task: NodeTool@0
         inputs:
           versionSpec: $(node_version)
@@ -79,7 +78,10 @@ jobs:
         displayName: Lint
       - script: make test
         displayName: Run tests
+      - script: make integration-mac
+        displayName: Run integration tests
       - script: make build
+        condition: "and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))"
         displayName: Build
         env:
           APPLEID: $(APPLEID)
@@ -124,10 +126,19 @@ jobs:
       - script: make test
         displayName: Run tests
       - bash: |
+          sudo apt-get update
+          sudo apt-get install libgconf-2-4 conntrack -y
+          curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+          sudo install minikube-linux-amd64 /usr/local/bin/minikube
+          sudo minikube start --driver=none
+        displayName: Install integration test dependencies
+      - script: xvfb-run --auto-servernum --server-args='-screen 0, 1600x900x24' make integration-linux
+        displayName: Run integration tests
+      - bash: |
           sudo chown root:root /
           sudo apt-get update && sudo apt-get install -y snapd
           sudo snap install snapcraft --classic
-          echo -n "${SNAP_LOGIN}" | base64 -d > snap_login
+          echo -n "${SNAP_LOGIN}" | base64 -i -d > snap_login
           snapcraft login --with snap_login
         displayName: Setup snapcraft
         condition: "and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))"
@@ -135,6 +146,7 @@ jobs:
           SNAP_LOGIN: $(SNAP_LOGIN)
       - script: make build
         displayName: Build
+        condition: "and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))"
         env:
           GH_TOKEN: $(GH_TOKEN)
       - bash: |

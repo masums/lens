@@ -95,7 +95,7 @@ export class ItemListLayout extends React.Component<ItemListLayoutProps> {
 
   // default user settings (ui show-hide tweaks mostly)
   @observable userSettings: ItemListLayoutUserSettings = {
-    showAppliedFilters: true,
+    showAppliedFilters: false,
   };
 
   constructor(props: ItemListLayoutProps) {
@@ -114,12 +114,14 @@ export class ItemListLayout extends React.Component<ItemListLayoutProps> {
     const { store, dependentStores, isClusterScoped } = this.props;
     const stores = [store, ...dependentStores];
     if (!isClusterScoped) stores.push(namespaceStore);
-    const loadingStores = stores.filter(store => !store.isLoaded);
-    loadingStores.forEach(store => store.loadAll());
-    await when(() => loadingStores.every(store => !store.isLoading));
-    const subscriptions = stores.map(store => store.subscribe());
-    await when(() => this.isUnmounting);
-    subscriptions.forEach(dispose => dispose()); // unsubscribe all
+    try {
+      await Promise.all(stores.map(store => store.loadAll()));
+      const subscriptions = stores.map(store => store.subscribe());
+      await when(() => this.isUnmounting);
+      subscriptions.forEach(dispose => dispose()); // unsubscribe all
+    } catch(error) {
+      console.log("catched", error)
+    }
   }
 
   componentWillUnmount() {

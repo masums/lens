@@ -11,6 +11,7 @@ import { namespaceStore } from "./namespace.store";
 import { _i18n } from "../../i18n";
 import { FilterIcon } from "../item-object-list/filter-icon";
 import { FilterType } from "../item-object-list/page-filters.store";
+import { isAllowedResource } from "../../api/rbac"
 
 interface Props extends SelectProps {
   showIcons?: boolean;
@@ -33,7 +34,9 @@ export class NamespaceSelect extends React.Component<Props> {
   private unsubscribe = noop;
 
   async componentDidMount() {
-    if (!namespaceStore.isLoaded) await namespaceStore.loadAll();
+    if (!namespaceStore.isLoaded) {
+      await namespaceStore.loadAll();
+    }
     this.unsubscribe = namespaceStore.subscribe();
   }
 
@@ -86,6 +89,7 @@ export class NamespaceSelectFilter extends React.Component {
     return (
       <NamespaceSelect
         placeholder={placeholder}
+        closeMenuOnSelect={false}
         isOptionSelected={() => false}
         controlShouldRenderValue={false}
         onChange={({ value: namespace }: SelectOption) => toggleContext(namespace)}

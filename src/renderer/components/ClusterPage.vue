@@ -93,39 +93,12 @@ export default {
       console.log("lens loaded")
       this.lens.loaded = true;
       this.$store.commit("updateLens", this.lens);
-      this.lens.webview.getWebContents().executeJavaScript(
-        // disable dragging of ui links
-        'document.styleSheets[0].insertRule("*, *::after, *::before { -webkit-user-drag: none; -webkit-app-region: no-drag; }", 1);'
-      );
-    },
-    addWebview: function() {
-      const container = document.getElementById("lens-container");
-      if (!container || !this.lens.webview) {
-        return
-      }
-      container.style = "display: block;"
-      let webview = null
-      container.childNodes.forEach((child) => {
-        if (child === this.lens.webview) {
-          webview = child
-        }
-      })
-      if (!webview) {
-        container.appendChild(this.lens.webview)
-      }
-      container.childNodes.forEach((child) => {
-        if (child !== this.lens.webview) {
-          child.style = "display: none;"
-        } else {
-          child.style = "top: 0; bottom: 20px;"
-        }
-      })
     },
     // Called only when online state changes
     toggleLens: function() {
       if (!this.lens) { return }
       if (this.accessible) {
-        this.activateLens();
+        setTimeout(this.activateLens, 0); // see: https://github.com/electron/electron/issues/10016
       } else {
         this.hideLens();
       }
@@ -138,7 +111,6 @@ export default {
         webview.addEventListener('did-finish-load', this.lensLoaded);
         webview.src = this.cluster.url;
         this.lens.webview = webview;
-        this.$store.dispatch("attachWebview", this.lens);
       }
       this.$store.dispatch("attachWebview", this.lens);
       this.$tracker.event("cluster", "open");

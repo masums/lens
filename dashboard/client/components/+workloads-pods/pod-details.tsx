@@ -6,7 +6,7 @@ import { disposeOnUnmount, observer } from "mobx-react";
 import { Link } from "react-router-dom";
 import { autorun, observable, reaction, toJS } from "mobx";
 import { Trans } from "@lingui/macro";
-import { IPodMetrics, nodesApi, Pod, podsApi, pvcApi } from "../../api/endpoints";
+import { IPodMetrics, nodesApi, Pod, podsApi, pvcApi, configMapApi } from "../../api/endpoints";
 import { DrawerItem, DrawerTitle } from "../drawer";
 import { Badge } from "../badge";
 import { autobind, cssNames, interval } from "../../utils";
@@ -64,7 +64,6 @@ export class PodDetails extends React.Component<Props> {
     const { status, spec } = pod;
     const { conditions, podIP } = status;
     const { nodeName } = spec;
-    const ownerRefs = pod.getOwnerRefs();
     const nodeSelector = pod.getNodeSelectors();
     const volumes = pod.getVolumes();
     const labels = pod.getLabels();
@@ -123,21 +122,6 @@ export class PodDetails extends React.Component<Props> {
           }
         </DrawerItem>
         }
-        {ownerRefs.length > 0 &&
-        <DrawerItem name={<Trans>Controlled By</Trans>}>
-          {
-            ownerRefs.map(ref => {
-              const { name, kind } = ref;
-              const ownerDetailsUrl = getDetailsUrl(lookupApiLink(ref, pod));
-              return (
-                <p key={name}>
-                  {kind} <Link to={ownerDetailsUrl}>{name}</Link>
-                </p>
-              );
-            })
-          }
-        </DrawerItem>
-        }
         <PodDetailsTolerations workload={pod}/>
         <PodDetailsAffinities workload={pod}/>
 
@@ -176,6 +160,9 @@ export class PodDetails extends React.Component<Props> {
             <DrawerTitle title={<Trans>Volumes</Trans>}/>
             {volumes.map(volume => {
               const claimName = volume.persistentVolumeClaim ? volume.persistentVolumeClaim.claimName : null;
+              const configMap = volume.configMap ? volume.configMap.name : null;
+              const type = Object.keys(volume)[1]
+
               return (
                 <div key={volume.name} className="volume">
                   <div className="title flex gaps">
@@ -183,8 +170,37 @@ export class PodDetails extends React.Component<Props> {
                     <span>{volume.name}</span>
                   </div>
                   <DrawerItem name={<Trans>Type</Trans>}>
-                    {Object.keys(volume)[1]}
+                    {type}
                   </DrawerItem>
+                  { type == "configMap" && (
+                    <div>
+                    {configMap && (
+                      <DrawerItem name={<Trans>Name</Trans>}>
+                        <Link
+                          to={getDetailsUrl(configMapApi.getUrl({
+                            name: configMap,
+                            namespace: pod.getNs(),
+                          }))}>{configMap}
+                        </Link>
+                      </DrawerItem>
+                    )}
+                    </div>
+                  )}
+                  { type === "emptyDir" && (
+                    <div>
+                      { volume.emptyDir.medium && (
+                      <DrawerItem name={<Trans>Medium</Trans>}>
+                        {volume.emptyDir.medium}
+                      </DrawerItem>
+                      )}
+                      { volume.emptyDir.sizeLimit && (
+                        <DrawerItem name={<Trans>Size Limit</Trans>}>
+                        {volume.emptyDir.sizeLimit}
+                        </DrawerItem>
+                      )}
+                    </div>
+                  )}
+
                   {claimName && (
                     <DrawerItem name={<Trans>Claim Name</Trans>}>
                       <Link

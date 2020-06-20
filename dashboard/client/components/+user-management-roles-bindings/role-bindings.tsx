@@ -35,29 +35,13 @@ export class RoleBindings extends React.Component<Props> {
           [sortBy.name]: (binding: RoleBinding) => binding.getName(),
           [sortBy.namespace]: (binding: RoleBinding) => binding.getNs(),
           [sortBy.bindings]: (binding: RoleBinding) => binding.getSubjectNames(),
-          [sortBy.age]: (binding: RoleBinding) => binding.getAge(false),
+          [sortBy.age]: (binding: RoleBinding) => binding.metadata.creationTimestamp,
         }}
         searchFilters={[
           (binding: RoleBinding) => binding.getSearchFields(),
           (binding: RoleBinding) => binding.getSubjectNames(),
         ]}
         renderHeaderTitle={<Trans>Role Bindings</Trans>}
-        filterItems={[
-          (items: RoleBinding[]) => items.filter(KubeObject.isNonSystem),
-        ]}
-        customizeHeader={({ info }) => ({
-          info: (
-            <>
-              {info}
-              <Icon
-                small
-                material="help_outline"
-                className="help-icon"
-                tooltip={<Trans>Excluded items with "system:" prefix</Trans>}
-              />
-            </>
-          )
-        })}
         renderTableHeader={[
           { title: <Trans>Name</Trans>, className: "name", sortBy: sortBy.name },
           { title: <Trans>Bindings</Trans>, className: "bindings", sortBy: sortBy.bindings },

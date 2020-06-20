@@ -30,7 +30,7 @@ export class NodeShellSession extends ShellSession {
     }
     args = ["exec", "-i", "-t", "-n", "kube-system", this.podId, "--", "sh", "-c", "((clear && bash) || (clear && ash) || (clear && sh))"]
 
-    const shellEnv = this.getShellEnv()
+    const shellEnv = await this.getCachedShellEnv()
     this.shellProcess = pty.spawn(shell, args, {
       cols: 80,
       cwd: this.cwd() || shellEnv["HOME"],
@@ -38,6 +38,7 @@ export class NodeShellSession extends ShellSession {
       name: "xterm-256color",
       rows: 30,
     });
+    this.running = true;
     this.pipeStdout()
     this.pipeStdin()
     this.closeWebsocketOnProcessExit()
@@ -101,11 +102,11 @@ export class NodeShellSession extends ShellSession {
   }
 
   protected waitForRunningPod(podId: string) {
-    return new Promise<boolean>((resolve, reject) => {
+    return new Promise<boolean>(async (resolve, reject) => {
       const kc = this.getKubeConfig();
       const watch = new k8s.Watch(kc);
 
-      const req = watch.watch(`/api/v1/namespaces/kube-system/pods`, {},
+      const req = await watch.watch(`/api/v1/namespaces/kube-system/pods`, {},
       // callback is called for each received object.
         (_type, obj) => {
           if (obj.metadata.name == podId && obj.status.phase === "Running") {

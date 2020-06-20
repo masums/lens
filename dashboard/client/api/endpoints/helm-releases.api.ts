@@ -156,9 +156,12 @@ export class HelmRelease implements ItemObject {
   }
 
   getChart(withVersion = false) {
-    return withVersion ?
-      this.chart :
-      this.chart.substr(0, this.chart.lastIndexOf("-"));
+    let chart = this.chart
+    if(!withVersion && this.getVersion() != "" ) {
+      const search = new RegExp(`-${this.getVersion()}`)
+      chart = chart.replace(search, "");
+    }
+    return chart
   }
 
   getRevision() {
@@ -170,7 +173,12 @@ export class HelmRelease implements ItemObject {
   }
 
   getVersion() {
-    return this.chart.match(/(\d+)[^-]*$/)[0];
+    const versions = this.chart.match(/(v?\d+)[^-].*$/)
+    if (versions) {
+      return versions[0]
+    } else {
+      return ""
+    }
   }
 
   getUpdated(humanize = true, compact = true) {
@@ -192,22 +200,5 @@ export class HelmRelease implements ItemObject {
     const versions = await helmChartStore.getVersions(chartName);
     const chartVersion = versions.find(chartVersion => chartVersion.version === version);
     return chartVersion ? chartVersion.repo : "";
-  }
-
-  getLastVersion(): string | null {
-    const chartName = this.getChart();
-    const versions = helmChartStore.versions.get(chartName);
-    if (!versions) {
-      return null; // checking new version state
-    }
-    if (versions.length) {
-      return versions[0].version; // versions already sorted when loaded, the first is latest
-    }
-    return this.getVersion();
-  }
-
-  hasNewVersion() {
-    const lastVersion = this.getLastVersion();
-    return lastVersion && lastVersion !== this.getVersion();
   }
 }

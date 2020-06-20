@@ -1,16 +1,15 @@
-import { app } from "electron"
-import { KubeConfig } from "@kubernetes/client-node"
+import { KubeConfig, CoreV1Api } from "@kubernetes/client-node"
 import { readFileSync } from "fs"
 import * as http from "http"
 import { ServerOptions } from "http-proxy"
 import * as url from "url"
-import { v4 as uuid } from "uuid"
 import logger from "./logger"
 import { getFreePort } from "./port"
-import { LensServer } from "./lens-server"
 import { KubeAuthProxy } from "./kube-auth-proxy"
 import { Cluster, ClusterPreferences } from "./cluster"
-import { userStore } from "../common/user-store"
+import { prometheusProviders } from "../common/prometheus-providers"
+import { PrometheusService, PrometheusProvider } from "./prometheus/provider-registry"
+import { PrometheusLens } from "./prometheus/lens"
 
 export class ContextHandler {
   public contextName: string
@@ -24,16 +23,15 @@ export class ContextHandler {
   protected apiTarget: ServerOptions
   protected proxyTarget: ServerOptions
   protected clusterUrl: url.UrlWithStringQuery
-  protected localServer: LensServer
   protected proxyServer: KubeAuthProxy
 
   protected clientCert: string
   protected clientKey: string
   protected secureApiConnection = true
   protected defaultNamespace: string
-  protected port: number
   protected proxyPort: number
   protected kubernetesApi: string
+  protected prometheusProvider: string
   protected prometheusPath: string
   protected clusterName: string
 
@@ -62,7 +60,6 @@ export class ContextHandler {
     this.defaultNamespace = kc.getContextObject(kc.currentContext).namespace
     this.url = `http://${this.id}.localhost:${cluster.port}/`
     this.kubernetesApi = `http://127.0.0.1:${cluster.port}/${this.id}`
-    this.setClusterPreferences(cluster.preferences)
     this.kc.clusters = [
       {
         name: kc.getCurrentCluster().name,
@@ -70,14 +67,17 @@ export class ContextHandler {
         skipTLSVerify: true
       }
     ]
+    this.setClusterPreferences(cluster.preferences)
   }
 
   public setClusterPreferences(clusterPreferences?: ClusterPreferences) {
+    this.prometheusProvider = clusterPreferences.prometheusProvider?.type
+
     if (clusterPreferences && clusterPreferences.prometheus) {
       const prom = clusterPreferences.prometheus
       this.prometheusPath = `${prom.namespace}/services/${prom.service}:${prom.port}`
     } else {
-      this.prometheusPath = "lens-metrics/services/prometheus:80"
+      this.prometheusPath = null
     }
     if(clusterPreferences && clusterPreferences.clusterName) {
       this.clusterName = clusterPreferences.clusterName;
@@ -86,30 +86,64 @@ export class ContextHandler {
     }
   }
 
-  public async init() {
-    const currentCluster = this.kc.getCurrentCluster()
-    if (currentCluster.caFile) {
-      this.certData = readFileSync(currentCluster.caFile).toString()
-    } else if (currentCluster.caData) {
-      this.certData = Buffer.from(currentCluster.caData, "base64").toString("ascii")
+  protected async resolvePrometheusPath(): Promise<string> {
+    const service = await this.getPrometheusService()
+    return `${service.namespace}/services/${service.service}:${service.port}`
+  }
+
+  public async getPrometheusProvider() {
+    if (!this.prometheusProvider) {
+      const service = await this.getPrometheusService()
+      logger.info(`using ${service.id} as prometheus provider`)
+      this.prometheusProvider = service.id
     }
-    const user = this.kc.getCurrentUser()
-    if (user.authProvider && user.authProvider.name === "oidc") {
-      const authConfig = user.authProvider.config
-      if (authConfig["idp-certificate-authority"]) {
-        this.authCertData = readFileSync(authConfig["idp-certificate-authority"]).toString()
-      } else if (authConfig["idp-certificate-authority-data"]) {
-        this.authCertData = Buffer.from(authConfig["idp-certificate-authority-data"], "base64").toString("ascii")
+    return prometheusProviders.find(p => p.id === this.prometheusProvider)
+  }
+
+  public async getPrometheusService(): Promise<PrometheusService> {
+    const providers = this.prometheusProvider ? prometheusProviders.filter((p, _) => p.id == this.prometheusProvider) : prometheusProviders
+    const prometheusPromises: Promise<PrometheusService>[] = providers.map(async (provider: PrometheusProvider): Promise<PrometheusService> => {
+      const apiClient = this.kc.makeApiClient(CoreV1Api)
+      return await provider.getPrometheusService(apiClient)
+    })
+    const resolvedPrometheusServices = await Promise.all(prometheusPromises)
+    const service = resolvedPrometheusServices.filter(n => n)[0]
+    if (service) {
+      return service
+    } else {
+      return {
+        id: "lens",
+        namespace: "lens-metrics",
+        service: "prometheus",
+        port: 80
       }
     }
   }
 
-  public async getApiTarget() {
-    if (this.apiTarget) { return this.apiTarget }
+  public async getPrometheusPath(): Promise<string> {
+    if (this.prometheusPath) return this.prometheusPath
 
-    this.apiTarget = {
+    this.prometheusPath = await this.resolvePrometheusPath()
+
+    return this.prometheusPath
+  }
+
+  public async getApiTarget(isWatchRequest = false) {
+    if (this.apiTarget && !isWatchRequest) {
+      return this.apiTarget
+    }
+    const timeout = isWatchRequest ? 4 * 60 * 60 * 1000 : 30000 // 4 hours for watch request, 30 seconds for the rest
+    const apiTarget = await this.newApiTarget(timeout)
+    if (!isWatchRequest) {
+      this.apiTarget = apiTarget
+    }
+    return apiTarget
+  }
+
+  protected async newApiTarget(timeout: number) {
+    return {
       changeOrigin: true,
-      timeout: 30000,
+      timeout: timeout,
       headers: {
         "Host": this.clusterUrl.hostname
       },
@@ -120,43 +154,6 @@ export class ContextHandler {
         path: this.clusterUrl.path
       },
     }
-
-    return this.apiTarget
-  }
-
-  public async getProxyTarget() {
-    if (this.proxyTarget) {
-      return this.proxyTarget;
-    }
-
-    this.proxyTarget = {
-      changeOrigin: true,
-      secure: false,
-      target: {
-        host: this.clusterUrl.host,
-        hostname: "localhost",
-        path: "/",
-        port: await this.resolvePort(),
-        protocol: "http://",
-      },
-    }
-
-    return this.proxyTarget;
-  }
-
-  protected async resolvePort(): Promise<number> {
-    if (this.port) return this.port
-
-    let serverPort: number = null
-    try {
-      serverPort = await getFreePort(49153, 49900) // the proxy will usually already be on 49152 so skip that
-    } catch(error) {
-      logger.error(error)
-      throw(error)
-    }
-    this.port = serverPort
-
-    return serverPort
   }
 
   protected async resolveProxyPort(): Promise<number> {
@@ -164,7 +161,7 @@ export class ContextHandler {
 
     let serverPort: number = null
     try {
-      serverPort = await getFreePort(49901, 65535)
+      serverPort = await getFreePort()
     } catch(error) {
       logger.error(error)
       throw(error)
@@ -186,35 +183,7 @@ export class ContextHandler {
     }
   }
 
-  protected initServer(serverUrl: string, port: number) {
-    const userPrefs = userStore.getPreferences()
-    const envs = {
-      KUBE_CLUSTER_URL: serverUrl,
-      KUBE_CLUSTER_NAME: this.clusterName,
-      KUBERNETES_TLS_SKIP: "true",
-      KUBERNETES_NAMESPACE: this.defaultNamespace,
-      SESSION_SECRET: this.id,
-      LOCAL_SERVER_PORT: port.toString(),
-      KUBE_METRICS_URL: `${serverUrl}/api/v1/namespaces/${this.prometheusPath}/proxy`,
-      STATS_NAMESPACE_DEFAULT: this.prometheusPath.split("/")[0],
-      CHARTS_ENABLED: "true",
-      LENS_VERSION: app.getVersion(),
-      LENS_THEME: `kontena-${userPrefs.colorTheme}`,
-      NODE_ENV: "production",
-    }
-    logger.debug(`spinning up lens-server process with env: ${JSON.stringify(envs)}`)
-    this.localServer = new LensServer(serverUrl, envs)
-  }
-
   public async ensureServer() {
-    if (!this.localServer) {
-      const currentCluster = this.kc.getCurrentCluster()
-      const clusterUrl = url.parse(currentCluster.server)
-      const serverPort = await this.resolvePort()
-      logger.info(`initializing server for ${clusterUrl.host} on port ${serverPort}`)
-      this.initServer(this.kubernetesApi, serverPort)
-      await this.localServer.run()
-    }
     if (!this.proxyServer) {
       const proxyPort = await this.resolveProxyPort()
       const proxyEnv = Object.assign({}, process.env)
@@ -227,10 +196,6 @@ export class ContextHandler {
   }
 
   public stopServer() {
-    if (this.localServer) {
-      this.localServer.exit()
-      this.localServer = null
-    }
     if (this.proxyServer) {
       this.proxyServer.exit()
       this.proxyServer = null
